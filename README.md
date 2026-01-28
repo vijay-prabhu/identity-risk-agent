@@ -26,6 +26,135 @@ Modern identity platforms need **scalable ML infrastructure** to power:
 
 ---
 
+## How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            LOGIN EVENT ARRIVES                               │
+│  User: john.doe@acme.com | Device: MacBook Pro | IP: 185.199.50.50 (VPN)    │
+│  Location: Moscow | Time: 3:47 AM local | MFA: Not used                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         FEATURE STORE ENRICHMENT                             │
+│  failed_logins_24h: 3 | device_age_days: 0 (NEW) | login_count_7d: 0        │
+│  ip_reputation_score: 0.9 | is_unusual_hour: 1 | location_changed: 1        │
+│  vpn_detected: 1 | mfa_used: 0 | is_new_device: 1 | hour_of_day: 3          │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              RISK SCORING                                    │
+│  ML Model Output: 0.87 (CRITICAL)                                           │
+│                                                                              │
+│  Contributing Factors:                                                       │
+│  • New device (+0.30) • VPN from high-risk location (+0.30)                 │
+│  • Unusual hour (+0.15) • No MFA (+0.10) • Location change (+0.02)          │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         LANGGRAPH AGENT DECISION                             │
+│                                                                              │
+│  State: CRITICAL risk detected → Investigate                                │
+│  Tool Calls:                                                                 │
+│  • get_user_history("john.doe@acme.com") → Usually logs in 9am-6pm Toronto  │
+│  • search_similar_events("VPN Moscow new device") → 3 similar attacks found │
+│                                                                              │
+│  Decision: BLOCK + CREATE SECURITY ALERT                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           RAG EXPLANATION                                    │
+│                                                                              │
+│  "Login blocked due to CRITICAL risk (0.87). Contributing factors:          │
+│   first login from this device, VPN connection from Moscow (user typically  │
+│   in Toronto), login at 3:47 AM (outside normal 9am-6pm pattern), MFA was   │
+│   not used. Historical context: 3 similar patterns in last 30 days were     │
+│   confirmed credential stuffing attacks. Recommended: Contact user via      │
+│   verified phone number."                                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              OUTCOMES                                        │
+│  ✗ Login blocked            ✓ Security alert created (Slack + PagerDuty)   │
+│  ✓ Event logged to MLflow   ✓ Metrics sent to Prometheus/Grafana           │
+│  ✓ Audit trail preserved    ✓ Explanation available for SOC team           │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Target Users
+
+| User | What They Do | Where They See Results |
+|------|--------------|------------------------|
+| **Security Operations (SOC)** | Monitor alerts, investigate flagged logins, review agent explanations | Grafana dashboards, Streamlit UI, Slack/PagerDuty alerts |
+| **Identity Engineers** | Configure risk thresholds, manage tenant settings, tune policies | API configuration, tenant middleware settings |
+| **ML Engineers** | Train models, monitor performance, tune features, manage experiments | MLflow UI, Jupyter notebooks, quality gate reports |
+| **Platform Engineers** | Manage infrastructure, deploy updates, monitor system health | Docker, Airflow UI, Prometheus/Grafana, CI/CD pipelines |
+| **Compliance/Audit** | Review decision logs, verify PII handling, generate reports | Audit logs, RAG explanations, privacy middleware logs |
+
+---
+
+## Business Outcomes
+
+| Outcome | How It's Achieved |
+|---------|-------------------|
+| **Blocked Account Takeovers** | Real-time risk scoring catches suspicious patterns before attackers gain access |
+| **Reduced False Positives** | ML model learns from historical data; RAG provides context for edge cases |
+| **Explainable Decisions** | Every block/challenge decision includes human-readable explanation for audit |
+| **Multi-Tenant Isolation** | Each organization's data is isolated; custom thresholds per tenant |
+| **Privacy Compliance** | PII is detected and redacted before LLM processing; audit trail preserved |
+| **Continuous Improvement** | Airflow DAGs retrain models weekly; quality gates prevent degraded deployments |
+
+---
+
+## Real-World Example: Enterprise Identity Platform
+
+Enterprise identity providers manage authentication for thousands of organizations. Every login attempt must be evaluated:
+
+**The Challenge:**
+- Is this a legitimate user or an attacker with stolen credentials?
+- Should we allow the login, challenge with MFA, or block entirely?
+- How do we explain our decision to security teams and auditors?
+- How do we handle thousands of organizations with different security policies?
+
+**How This Platform Solves It:**
+
+| Step | What Happens | Component |
+|------|--------------|-----------|
+| 1. Event Ingestion | Login attempt captured with device, IP, location, time | FastAPI endpoint |
+| 2. Feature Enrichment | Historical context added (failed logins, device age, typical patterns) | Feast feature store |
+| 3. Risk Scoring | ML model calculates risk score (0-1) with contributing factors | scikit-learn model |
+| 4. Agent Investigation | High-risk events trigger autonomous investigation | LangGraph agent |
+| 5. Decision | Agent decides: allow, challenge (MFA), or block | Tool-based actions |
+| 6. Explanation | RAG generates human-readable explanation | Qdrant + sentence-transformers |
+| 7. Alerting | Security team notified for critical events | Prometheus + alerting |
+| 8. Learning | Event logged for model retraining | MLflow + Airflow |
+
+**Multi-Tenant Reality:**
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  TENANT: Acme Corp (tenant_id: acme_corp)                                   │
+│  • Custom threshold: Block at risk score 0.7                                │
+│  • Policy: Always require MFA for VPN connections                           │
+│  • Data isolation: Only Acme's historical events used for RAG               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  TENANT: StartupXYZ (tenant_id: startup_xyz)                                │
+│  • Custom threshold: Block at risk score 0.9 (more permissive)              │
+│  • Policy: VPN allowed without extra checks                                 │
+│  • Data isolation: Only StartupXYZ's events, separate from other tenants    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Architecture Overview
 
 ```mermaid
