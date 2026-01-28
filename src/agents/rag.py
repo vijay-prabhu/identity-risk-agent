@@ -3,9 +3,12 @@ RAG Pipeline for Risk Explanations
 
 Retrieval-Augmented Generation pipeline for explaining risk decisions
 using relevant historical context.
+
+Supports Ollama for local LLM inference with fallback to templates.
 """
 
 import logging
+import os
 from typing import List, Optional, Dict, Any
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -14,6 +17,52 @@ from langchain_core.output_parsers import StrOutputParser
 from src.agents.vector_store import IdentityVectorStore, create_event_text
 
 logger = logging.getLogger(__name__)
+
+# Ollama configuration
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
+
+# Try to import Ollama LLM
+try:
+    from langchain_ollama import OllamaLLM
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
+    logger.warning("langchain-ollama not installed. LLM features will use templates.")
+
+
+def create_ollama_llm(
+    model: str = OLLAMA_MODEL,
+    base_url: str = OLLAMA_BASE_URL,
+    temperature: float = 0.3,
+) -> Optional[Any]:
+    """
+    Create an Ollama LLM instance.
+
+    Args:
+        model: Ollama model name (e.g., "llama3.2", "mistral", "phi3")
+        base_url: Ollama server URL
+        temperature: Sampling temperature (lower = more deterministic)
+
+    Returns:
+        OllamaLLM instance or None if unavailable
+    """
+    if not OLLAMA_AVAILABLE:
+        logger.warning("Ollama not available. Install with: pip install langchain-ollama")
+        return None
+
+    try:
+        llm = OllamaLLM(
+            model=model,
+            base_url=base_url,
+            temperature=temperature,
+        )
+        # Test connection by getting model info
+        logger.info(f"Ollama LLM initialized: {model} at {base_url}")
+        return llm
+    except Exception as e:
+        logger.warning(f"Failed to initialize Ollama: {e}. Using template fallback.")
+        return None
 
 # System prompt for risk explanation
 SYSTEM_PROMPT = """You are an identity security analyst AI assistant. Your role is to explain risk scoring decisions for login events.
@@ -60,22 +109,41 @@ class RiskExplainer:
 
     Retrieves relevant context from vector store and uses LLM
     to generate human-readable explanations.
+
+    Supports:
+    - Ollama for local LLM inference (privacy-safe, no data leaves your network)
+    - Template-based fallback when LLM is unavailable
     """
 
     def __init__(
         self,
         vector_store: Optional[IdentityVectorStore] = None,
         llm=None,
+        use_ollama: bool = False,
+        ollama_model: str = OLLAMA_MODEL,
     ):
         """
         Initialize the explainer.
 
         Args:
             vector_store: Vector store for context retrieval
-            llm: LangChain-compatible LLM (default: mock for testing)
+            llm: LangChain-compatible LLM (overrides use_ollama if provided)
+            use_ollama: If True, attempt to connect to Ollama
+            ollama_model: Ollama model name (e.g., "llama3.2", "mistral")
         """
         self.vector_store = vector_store or IdentityVectorStore()
-        self.llm = llm
+
+        # Initialize LLM
+        if llm is not None:
+            self.llm = llm
+        elif use_ollama:
+            self.llm = create_ollama_llm(model=ollama_model)
+            if self.llm:
+                logger.info(f"Using Ollama LLM: {ollama_model}")
+            else:
+                logger.info("Ollama unavailable, using template-based explanations")
+        else:
+            self.llm = None
 
         # Build prompt template
         self.prompt = ChatPromptTemplate.from_messages([
@@ -159,16 +227,23 @@ class RiskExplainer:
 
         # Generate explanation
         if self.llm:
-            # Use LLM for generation
-            chain = self.prompt | self.llm | StrOutputParser()
-            explanation = chain.invoke({
-                "event_details": event_details,
-                "risk_score": f"{risk_score:.2f}",
-                "risk_level": risk_level.upper(),
-                "risk_factors": factors_str,
-                "context": context,
-                "query": query,
-            })
+            try:
+                # Use LLM for generation
+                chain = self.prompt | self.llm | StrOutputParser()
+                explanation = chain.invoke({
+                    "event_details": event_details,
+                    "risk_score": f"{risk_score:.2f}",
+                    "risk_level": risk_level.upper(),
+                    "risk_factors": factors_str,
+                    "context": context,
+                    "query": query,
+                })
+            except Exception as e:
+                # Fallback to template if LLM call fails (e.g., server down)
+                logger.warning(f"LLM call failed, using template: {e}")
+                explanation = self._generate_template_explanation(
+                    event, risk_score, risk_level, risk_factors, similar_events
+                )
         else:
             # Fallback: template-based explanation
             explanation = self._generate_template_explanation(
@@ -227,15 +302,36 @@ class RAGPipeline:
     Complete RAG pipeline for the identity risk platform.
 
     Handles document ingestion, retrieval, and generation.
+
+    Example usage with Ollama:
+        # Start Ollama server: ollama serve
+        # Pull a model: ollama pull llama3.2
+        pipeline = RAGPipeline(use_ollama=True, ollama_model="llama3.2")
     """
 
     def __init__(
         self,
         vector_store: Optional[IdentityVectorStore] = None,
         llm=None,
+        use_ollama: bool = False,
+        ollama_model: str = OLLAMA_MODEL,
     ):
+        """
+        Initialize the RAG pipeline.
+
+        Args:
+            vector_store: Vector store for retrieval
+            llm: Custom LangChain LLM (overrides use_ollama)
+            use_ollama: If True, connect to local Ollama server
+            ollama_model: Ollama model to use
+        """
         self.vector_store = vector_store or IdentityVectorStore()
-        self.explainer = RiskExplainer(vector_store=self.vector_store, llm=llm)
+        self.explainer = RiskExplainer(
+            vector_store=self.vector_store,
+            llm=llm,
+            use_ollama=use_ollama,
+            ollama_model=ollama_model,
+        )
 
     def ingest_events(
         self,

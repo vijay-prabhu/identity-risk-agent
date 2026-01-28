@@ -12,6 +12,15 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+
+# XGBoost is optional - requires libomp on Mac
+try:
+    from xgboost import XGBClassifier
+    XGBOOST_AVAILABLE = True
+except (ImportError, Exception) as e:
+    XGBOOST_AVAILABLE = False
+    XGBClassifier = None  # type: ignore
+    print(f"XGBoost not available: {e}. Using other models only.")
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -160,6 +169,49 @@ def train_logistic_regression(
         class_weight="balanced",
         random_state=random_state,
         max_iter=1000,
+    )
+    model.fit(X_train, y_train)
+    return model
+
+
+def train_xgboost(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    random_state: int = 42,
+) -> Optional["XGBClassifier"]:
+    """
+    Train XGBoost classifier for gradient boosting approach.
+
+    XGBoost often outperforms Random Forest on tabular data,
+    especially with proper hyperparameter tuning.
+
+    Args:
+        X_train: Training features
+        y_train: Training labels
+        random_state: Random seed
+
+    Returns:
+        Trained XGBClassifier or None if XGBoost unavailable
+    """
+    if not XGBOOST_AVAILABLE:
+        print("  XGBoost not available, skipping...")
+        return None
+
+    # Calculate scale_pos_weight for class imbalance
+    neg_count = (y_train == 0).sum()
+    pos_count = (y_train == 1).sum()
+    scale_pos_weight = neg_count / pos_count if pos_count > 0 else 1
+
+    model = XGBClassifier(
+        n_estimators=100,
+        max_depth=6,
+        learning_rate=0.1,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        scale_pos_weight=scale_pos_weight,
+        random_state=random_state,
+        eval_metric="auc",
+        n_jobs=-1,
     )
     model.fit(X_train, y_train)
     return model
@@ -367,12 +419,20 @@ def train_and_evaluate(
     print("\n  Training Logistic Regression (baseline)...")
     lr_model = train_logistic_regression(X_train, y_train)
 
+    print("\n  Training XGBoost (gradient boosting)...")
+    xgb_model = train_xgboost(X_train, y_train)
+
     # Evaluate models
     print("\n3. Evaluating models...")
 
     iso_metrics = evaluate_model(iso_model, X_test, y_test, "Isolation Forest")
     rf_metrics = evaluate_model(rf_model, X_test, y_test, "Random Forest")
     lr_metrics = evaluate_model(lr_model, X_test, y_test, "Logistic Regression")
+
+    if xgb_model is not None:
+        xgb_metrics = evaluate_model(xgb_model, X_test, y_test, "XGBoost")
+    else:
+        xgb_metrics = {"auc": 0, "accuracy": 0, "precision": 0, "recall": 0, "f1": 0}
 
     # Cross-validation for best model
     print("\n4. Cross-validation...")
@@ -386,15 +446,25 @@ def train_and_evaluate(
         y_all,
     )
 
-    # Select best model (Random Forest typically performs best)
-    best_model = rf_model
-    best_metrics = rf_metrics
+    # Select best model based on AUC
+    model_results = {
+        "random_forest": (rf_model, rf_metrics),
+        "logistic_regression": (lr_model, lr_metrics),
+    }
+    # Include XGBoost only if available
+    if xgb_model is not None:
+        model_results["xgboost"] = (xgb_model, xgb_metrics)
 
-    # Feature importance
-    print("\n5. Feature Importance (Random Forest):")
+    best_model_name = max(model_results, key=lambda k: model_results[k][1]["auc"])
+    best_model, best_metrics = model_results[best_model_name]
+
+    print(f"\n  Best model: {best_model_name} (AUC: {best_metrics['auc']:.4f})")
+
+    # Feature importance (works for RF and XGBoost)
+    print(f"\n5. Feature Importance ({best_model_name}):")
     importance = pd.DataFrame({
         "feature": FEATURE_COLUMNS,
-        "importance": rf_model.feature_importances_,
+        "importance": best_model.feature_importances_,
     }).sort_values("importance", ascending=False)
     print(importance.to_string(index=False))
 
@@ -416,15 +486,16 @@ def train_and_evaluate(
         "isolation_forest": iso_metrics,
         "random_forest": rf_metrics,
         "logistic_regression": lr_metrics,
+        "xgboost": xgb_metrics,
         "cross_validation": cv_metrics,
-        "best_model": "random_forest",
+        "best_model": best_model_name,
         "best_auc": best_metrics["auc"],
     }
 
     print("\n" + "=" * 60)
     print("TRAINING COMPLETE")
     print("=" * 60)
-    print(f"Best Model: Random Forest")
+    print(f"Best Model: {best_model_name}")
     print(f"Test ROC-AUC: {best_metrics['auc']:.4f}")
     print(f"CV ROC-AUC: {cv_metrics['cv_mean']:.4f} (+/- {cv_metrics['cv_std']*2:.4f})")
 

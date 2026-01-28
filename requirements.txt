@@ -23,8 +23,8 @@ streamlit>=1.30.0
 
 # LLM & Agents
 langchain>=0.1.0
+langchain-ollama>=0.1.0
 langgraph>=0.0.20
-ollama>=0.1.0
 
 # Vector Database
 qdrant-client>=1.7.0

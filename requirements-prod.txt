@@ -8,6 +8,7 @@ pyarrow>=14.0.0
 
 # ML & Modeling
 scikit-learn>=1.4.0
+xgboost>=2.0.0
 sentence-transformers>=2.2.0
 
 # Feature Store
@@ -24,6 +25,7 @@ streamlit>=1.30.0
 
 # LLM & Agents
 langchain>=0.1.0
+langchain-ollama>=0.1.0
 langgraph>=0.0.20
 
 # Vector Database
