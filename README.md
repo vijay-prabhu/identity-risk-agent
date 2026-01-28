@@ -155,17 +155,6 @@ identity-risk-agent/
 
 ---
 
-## Relevant For
-
-| Role Type | Key Skills Demonstrated |
-|-----------|------------------------|
-| **ML Platform Engineer** | Feature stores, orchestration, CI/CD |
-| **GenAI Infrastructure** | Agents, RAG, MCP patterns |
-| **Security ML Engineer** | Multi-tenant, privacy, risk scoring |
-| **MLOps Engineer** | Quality gates, observability |
-
----
-
 ## License
 
 MIT
