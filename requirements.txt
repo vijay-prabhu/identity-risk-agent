@@ -1,0 +1,53 @@
+# Core Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+pyarrow>=14.0.0
+faker>=22.0.0
+
+# ML & Modeling
+scikit-learn>=1.4.0
+xgboost>=2.0.0
+sentence-transformers>=2.2.0
+
+# Feature Store
+feast>=0.36.0
+
+# API & Serving
+fastapi>=0.109.0
+uvicorn>=0.27.0
+pydantic>=2.5.0
+httpx>=0.26.0
+
+# UI
+streamlit>=1.30.0
+
+# LLM & Agents
+langchain>=0.1.0
+langgraph>=0.0.20
+ollama>=0.1.0
+
+# Vector Database
+qdrant-client>=1.7.0
+
+# ML Tracking
+mlflow>=2.10.0
+
+# Data Validation
+great-expectations>=0.18.0
+
+# Privacy
+presidio-analyzer>=2.2.0
+presidio-anonymizer>=2.2.0
+
+# Testing
+pytest>=8.0.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.23.0
+
+# Development
+jupyter>=1.0.0
+ipykernel>=6.29.0
+python-dotenv>=1.0.0
+
+# Monitoring (optional)
+prometheus-client>=0.19.0
