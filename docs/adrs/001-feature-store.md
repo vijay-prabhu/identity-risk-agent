@@ -1,54 +1,64 @@
-# ADR 001: Feature Store Implementation
+# ADR 001: Feature Store Selection
 
 ## Status
-
 Accepted
 
 ## Context
+The identity risk platform needs consistent feature computation across:
+- **Training time**: Batch feature computation for model training
+- **Serving time**: Real-time feature retrieval for scoring
+- **Analysis**: Historical feature exploration
 
-Need consistent online/offline feature access for risk scoring across tenants.
-Features include: failed_logins_24h, ip_reputation, device_age_days, location_velocity, etc.
-
-Key requirements:
-- Training/serving consistency (avoid skew)
-- Low-latency online serving (<10ms)
-- Feature versioning and lineage
-- Multi-tenant isolation
-- Local development friendly
+Without a feature store, we risk:
+- Training-serving skew (different feature logic in training vs production)
+- Duplicated feature computation code
+- No feature versioning or lineage
 
 ## Decision
+Use **Feast** as the feature store with local file backend.
 
-**Feast (local mode)**:
-- Offline store: Parquet files (historical training)
-- Online store: SQLite (low-latency serving for dev)
-- Future: Cloud migration path to Postgres/Redis
+### Why Feast
+1. **Open source** - No vendor lock-in, active community
+2. **Online/offline consistency** - Same feature definitions serve both paths
+3. **Point-in-time correctness** - Prevents data leakage in training
+4. **Multiple backends** - Can scale from local files to Redis/DynamoDB
+5. **Python-native** - Integrates with pandas, scikit-learn
+
+### Configuration
+```yaml
+# feature_store/feature_store.yaml
+project: identity_risk
+provider: local
+online_store:
+  type: sqlite
+  path: data/online_store.db
+offline_store:
+  type: file
+entity_key_serialization_version: 3
+```
 
 ## Alternatives Considered
 
-| Option | Pros | Cons | Score |
-|--------|------|------|-------|
-| Feast | ML-native, lineage, open source | Learning curve | 9/10 |
-| Redis only | Simple, fast | No versioning, no offline | 6/10 |
-| Tecton | Fully managed | $$$ (not free tier) | 4/10 |
-| Custom pandas | Simple | No consistency guarantees | 3/10 |
+| Option | Pros | Cons |
+|--------|------|------|
+| **Feast (chosen)** | OSS, flexible backends, active development | Steeper learning curve |
+| **Tecton** | Managed service, enterprise features | Expensive, vendor lock-in |
+| **Hopsworks** | Full ML platform | Heavy, complex setup |
+| **Custom solution** | Full control | Maintenance burden, rebuild from scratch |
 
 ## Consequences
 
 ### Positive
-- Familiar production tool (used at scale)
-- Local-first development experience
-- Clear migration path to cloud providers
-- Feature definitions are versioned in git
+- Feature definitions are version-controlled
+- Online/offline feature parity guaranteed
+- Easy migration to cloud backends (Redis, DynamoDB)
+- Built-in data quality checks
 
 ### Negative
-- SQLite limits throughput for prod (need Postgres migration)
-- Additional learning curve for team members
-- Some operational overhead
-
-### Risks
-- Online store performance may need upgrade for production traffic
+- Additional infrastructure component
+- Feast version upgrades may require migrations
+- Local SQLite limits concurrent access
 
 ## References
-
 - [Feast Documentation](https://docs.feast.dev/)
-- [Feature Store comparison](https://www.featurestore.org/)
+- [Feature Store for ML](https://www.featurestore.org/)
