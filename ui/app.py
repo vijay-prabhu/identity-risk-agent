@@ -123,4 +123,4 @@ with tab3:
 
 # Footer
 st.markdown("---")
-st.markdown("Identity Risk Agent Platform | [GitHub](https://github.com/yourusername/identity-risk-agent)")
+st.markdown("Identity Risk Agent Platform | [GitHub](https://github.com/vijay-prabhu/identity-risk-agent)")

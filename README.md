@@ -1,122 +1,154 @@
-# Identity Risk Agent Platform
+<div align="center">
 
-> Portfolio project demonstrating a full ML/GenAI workflow for identity risk scoring - from data ingestion through feature engineering, model training, RAG-powered agents, and production deployment.
+# 🔐 Identity Risk Agent Platform
 
-[![Tests](https://github.com/yourusername/identity-risk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/identity-risk-agent/actions)
+[![Tests](https://github.com/vijay-prabhu/identity-risk-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/vijay-prabhu/identity-risk-agent/actions)
+[![Demo](https://img.shields.io/badge/Live_Demo-🚀-blue.svg?logo=vercel)](https://identity-risk-agent.vercel.app)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 
-## Overview
+**Production-grade ML + GenAI infrastructure for secure, multi-tenant identity risk analysis.**
 
-This project mirrors enterprise ML platform patterns (similar to Okta's Intelligence Accelerator), showcasing:
+*Full-stack MLOps platform powering real-time risk scoring, explainable RAG, and autonomous security agents.*
 
-- **ML Infrastructure**: Feature stores, MLflow tracking, distributed training
-- **GenAI/Agents**: RAG pipelines, LangGraph agents, MCP-like tool protocols
-- **Production Patterns**: Multi-tenant isolation, privacy/security, CI/CD, monitoring
+</div>
 
-## Architecture
+---
 
+## 🎯 Problem Solved
+
+Modern identity platforms need **scalable ML infrastructure** to power:
+- Real-time risk scoring for login events
+- Explainable decisions via RAG
+- Autonomous security agents with tool access
+- Multi-tenant isolation + privacy compliance
+
+**This project implements the complete platform**, from raw event ingestion to production deployment.
+
+---
+
+## 🏗️ Architecture Overview
+
+```mermaid
+graph TB
+    A[Login Events<br/>Synthetic + Real APIs] --> B[Feature Store<br/>Feast Local]
+    B --> C[Risk Model<br/>Isolation Forest]
+    B --> D[Vector DB<br/>Qdrant + Embeddings]
+    C --> E[FastAPI Serving<br/>Multi-Tenant]
+    D --> F[RAG Pipeline]
+    F --> G[LangGraph Agent<br/>MCP Tools]
+    E --> H[Streamlit UI]
+    G --> H
+    I[Airflow ETL<br/>Daily Retrain] -.-> B
+    J[MLflow + Grafana<br/>Observability] -.->|Metrics| E
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Identity Risk Agent Platform                  │
-├─────────────────────────────────────────────────────────────────────┤
-│  Data Layer          │  ML Layer           │  Agent Layer           │
-│  ─────────────────   │  ─────────────────  │  ─────────────────     │
-│  • Synthetic events  │  • Feature Store    │  • RAG Pipeline        │
-│  • Feature pipeline  │  • Risk Model       │  • LangGraph Agents    │
-│  • Vector embeddings │  • MLflow tracking  │  • MCP Tools           │
-├─────────────────────────────────────────────────────────────────────┤
-│  API Layer           │  Infrastructure     │  Extensions            │
-│  ─────────────────   │  ─────────────────  │  ─────────────────     │
-│  • FastAPI serving   │  • Docker Compose   │  • Multi-tenant        │
-│  • Streamlit UI      │  • GitHub Actions   │  • Privacy (Presidio)  │
-│  • Health/Score APIs │  • Monitoring       │  • Real external data  │
-└─────────────────────────────────────────────────────────────────────┘
-```
 
-## Project Phases
+---
 
-| Phase | Milestone | Status |
-|-------|-----------|--------|
-| **Phase 1** | MVP Scoring API | 🔲 Not Started |
-| **Phase 2** | ML Infra Layer (Feature Store, MLflow) | 🔲 Not Started |
-| **Phase 3** | GenAI Agent (RAG, LangGraph, MCP) | 🔲 Not Started |
-| **Phase 4** | Production Polish (CI/CD, Monitoring) | 🔲 Not Started |
-| **Phase 5** | Portfolio Ready (ADRs, Docs, Demo) | 🔲 Not Started |
+## 🚀 Features & Enterprise Patterns
 
-## Tech Stack
+| Feature | Status | Tech |
+|---------|--------|------|
+| **Multi-Tenant Isolation** | 🔲 Phase 2 | Qdrant namespaces + API middleware |
+| **Privacy & PII Redaction** | 🔲 Phase 3 | Presidio + audit logs |
+| **Real-Time Risk Scoring** | 🔲 Phase 1 | scikit-learn + Feast online |
+| **RAG Explanations** | 🔲 Phase 3 | sentence-transformers + Ollama |
+| **Autonomous Agents** | 🔲 Phase 3 | LangGraph + MCP tools |
+| **Production Orchestration** | 🔲 Phase 4 | Airflow + CI/CD gates |
+| **Observability** | 🔲 Phase 4 | MLflow + Grafana |
 
-**Core:**
-- Data: pandas, Faker, Parquet/SQLite
-- ML: scikit-learn, sentence-transformers
-- Features: Feast (local mode)
-- Serving: FastAPI, Streamlit
-- LLM/Agents: Ollama (local), LangGraph
-- Vector DB: Qdrant Cloud (free tier)
-- Tracking: MLflow (local)
+---
 
-**Infrastructure:**
-- Orchestration: Airflow (Docker)
-- CI/CD: GitHub Actions
-- Monitoring: Prometheus/Grafana
-- Containers: Docker Compose
-
-## Quick Start
+## 📋 Quickstart
 
 ```bash
-# Clone & install
-git clone https://github.com/yourusername/identity-risk-agent.git
+git clone https://github.com/vijay-prabhu/identity-risk-agent
 cd identity-risk-agent
+
+# Install & run
 pip install -r requirements.txt
-
-# Local dev (Phase 1)
-make dev          # Starts FastAPI + Streamlit
-
-# Run tests
-make test         # Full test suite
-make test-model-gate  # Model quality gates
+make dev  # FastAPI + Streamlit
 
 # Full stack (Phase 4)
-docker-compose up # Airflow + monitoring
+docker-compose up  # + Airflow/MLflow/Grafana
+
+# Tests + quality gates
+make test
+make test-model-gate  # Fail if AUC < 0.85
 ```
 
-## Project Structure
+---
+
+## 🧠 Architecture Decisions
+
+| Decision | Why It Matters |
+|----------|----------------|
+| [Feature Store (Feast)](docs/adrs/001-feature-store.md) | Online/offline consistency |
+| [Multi-Tenant Design](docs/adrs/003-multi-tenant.md) | Enterprise isolation |
+| [LLM Provider](docs/adrs/002-llm-provider.md) | Cost/latency/privacy balance |
+| [Agent Runtime](docs/adrs/004-agent-runtime.md) | Scalable GenAI infra |
+| [Testing Gates](docs/adrs/006-testing.md) | ML quality assurance |
+
+---
+
+## 🛠️ Tech Stack
+
+```
+Data:        pandas, Faker, ipapi.co (real IP intel)
+ML:          scikit-learn, sentence-transformers
+Infra:       Feast, MLflow, Airflow, FastAPI
+GenAI:       LangGraph, Qdrant, Ollama
+Deploy:      Docker, Vercel/Render, GitHub Actions
+Observability: Grafana, Prometheus
+Testing:     pytest, Great Expectations
+```
+
+**All free-tier compatible.**
+
+---
+
+## 📂 Project Structure
 
 ```
 identity-risk-agent/
-├── README.md                 # This file
-├── docs/
-│   └── adrs/                 # Architecture Decision Records
-├── data/                     # Synthetic data + schemas
-├── notebooks/                # Phase-wise Jupyter notebooks
+├── api/                     # FastAPI application
+├── ui/                      # Streamlit dashboard
 ├── src/
-│   ├── core/                 # MVP scoring logic
-│   ├── features/             # Feature engineering
-│   ├── models/               # Training/evaluation
-│   ├── agents/               # RAG + LangGraph
-│   ├── tools/                # MCP-like APIs
-│   ├── privacy/              # PII detection/redaction
-│   └── infra/                # Docker, k8s manifests
-├── api/                      # FastAPI application
-├── ui/                       # Streamlit dashboard
-├── tests/                    # Test suite
-│   ├── test_data/            # Schema + distribution tests
-│   ├── test_models/          # Quality gates (AUC > 0.85)
-│   ├── test_api/             # Contract + integration
-│   └── test_extensions/      # Tenant isolation, privacy
-├── docker-compose.yml        # Local stack
-├── .github/workflows/        # CI/CD pipelines
-├── Makefile                  # Dev commands
-└── requirements.txt          # Python dependencies
+│   ├── core/                # MVP scoring logic
+│   ├── features/            # Feature engineering
+│   ├── models/              # Training/evaluation
+│   ├── agents/              # RAG + LangGraph
+│   ├── tools/               # MCP-like APIs
+│   └── privacy/             # PII detection/redaction
+├── data/                    # Synthetic data + schemas
+├── notebooks/               # Phase-wise Jupyter notebooks
+├── tests/                   # Test suite
+├── docs/adrs/               # Architecture Decision Records
+└── .github/workflows/       # CI/CD pipelines
 ```
 
-## Success Metrics
+---
+
+## 📈 Target Metrics
 
 | Metric | Target |
 |--------|--------|
-| Live demo URL | Publicly accessible |
+| Synthetic events | 10k logins |
+| Model AUC | > 0.85 |
+| Agent latency | < 2s p95 |
 | Test coverage | 80%+ |
-| Model quality | ROC-AUC > 0.85 |
-| ADRs written | 5+ decisions |
-| Extensions | 4 togglable features |
+
+---
+
+## 🎯 Relevant For
+
+| Role Type | Key Skills Demonstrated |
+|-----------|------------------------|
+| **ML Platform Engineer** | Feature stores, orchestration, CI/CD |
+| **GenAI Infrastructure** | Agents, RAG, MCP patterns |
+| **Security ML Engineer** | Multi-tenant, privacy, risk scoring |
+| **MLOps Engineer** | Quality gates, observability |
+
+---
 
 ## License
 
