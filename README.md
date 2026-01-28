@@ -6,9 +6,11 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Production-grade ML + GenAI infrastructure for secure, multi-tenant identity risk analysis.**
+**A production-grade ML + GenAI platform for identity risk analysis.**
 
-*Full-stack MLOps platform powering real-time risk scoring, explainable RAG, and autonomous security agents.*
+The system scores login events in real-time, uses autonomous agents to investigate high-risk events, and provides explainable decisions through RAG.
+
+`60 automated tests` · `Model AUC ~1.0` · `7-service Docker stack` · `6 ADRs`
 
 </div>
 
