@@ -122,7 +122,7 @@ jobs:
 
           # Train and evaluate (returns tuple: scorer, metrics)
           scorer, metrics = train_and_evaluate(df)
-          auc = metrics['auc']
+          auc = metrics['best_auc']
           print(f'Model AUC: {auc:.4f}')
 
           # Quality gate: AUC must be >= 0.85
