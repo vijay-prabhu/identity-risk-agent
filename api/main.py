@@ -5,18 +5,27 @@ Main API endpoints for risk scoring and agent interactions.
 """
 
 import logging
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from src.models.risk_model import RiskScorer, FEATURE_COLUMNS
 from src.agents.rag import RAGPipeline
 from src.privacy.pii_detector import PIIDetector, PrivacyMiddleware
+
+# Try to import prometheus client, use mock if not available
+try:
+    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+    PROMETHEUS_AVAILABLE = True
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -26,6 +35,35 @@ logger = logging.getLogger(__name__)
 _scorer: Optional[RiskScorer] = None
 _rag_pipeline: Optional[RAGPipeline] = None
 _privacy: Optional[PrivacyMiddleware] = None
+
+# Prometheus metrics
+if PROMETHEUS_AVAILABLE:
+    REQUEST_COUNT = Counter(
+        'http_requests_total',
+        'Total HTTP requests',
+        ['method', 'endpoint', 'status']
+    )
+    REQUEST_LATENCY = Histogram(
+        'http_request_duration_seconds',
+        'HTTP request latency',
+        ['method', 'endpoint'],
+        buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+    )
+    RISK_SCORE_HISTOGRAM = Histogram(
+        'risk_score_distribution',
+        'Distribution of risk scores',
+        ['tenant_id'],
+        buckets=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    )
+    RISK_LEVEL_COUNTER = Counter(
+        'risk_score_total',
+        'Total risk scores by level',
+        ['risk_level', 'tenant_id']
+    )
+    MODEL_LOADED = Gauge(
+        'model_loaded',
+        'Whether the risk model is loaded (1) or not (0)'
+    )
 
 
 def get_scorer() -> RiskScorer:
@@ -260,6 +298,11 @@ async def score_login(event: LoginEvent):
     # Get risk factors
     factors = get_risk_factors(features, risk_score)
 
+    # Record metrics
+    if PROMETHEUS_AVAILABLE:
+        RISK_SCORE_HISTOGRAM.labels(tenant_id=event.tenant_id).observe(risk_score)
+        RISK_LEVEL_COUNTER.labels(risk_level=risk_level, tenant_id=event.tenant_id).inc()
+
     return RiskScore(
         user_id=event.user_id,
         risk_score=round(risk_score, 4),
@@ -369,3 +412,41 @@ async def list_features():
             "success": "Login successful (0 or 1)",
         },
     }
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint."""
+    if PROMETHEUS_AVAILABLE:
+        return PlainTextResponse(
+            generate_latest(),
+            media_type=CONTENT_TYPE_LATEST,
+        )
+    return PlainTextResponse(
+        "# Prometheus client not installed\n",
+        media_type="text/plain",
+    )
+
+
+# Middleware for request metrics
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    """Record request metrics."""
+    start_time = time.time()
+
+    response = await call_next(request)
+
+    # Record metrics if prometheus is available
+    if PROMETHEUS_AVAILABLE:
+        duration = time.time() - start_time
+        endpoint = request.url.path
+        method = request.method
+        status = str(response.status_code)
+
+        REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=status).inc()
+        REQUEST_LATENCY.labels(method=method, endpoint=endpoint).observe(duration)
+
+        # Update model loaded gauge
+        MODEL_LOADED.set(1 if _scorer is not None else 0)
+
+    return response

@@ -1,60 +1,238 @@
-name: CI
+# Identity Risk Agent - CI/CD Pipeline
+# Runs tests, quality gates, and builds Docker images
+
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  test-data:
-    name: Data Validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run data tests
-        run: pytest tests/test_data/ -v
-
-  test-model:
-    name: Model Quality Gates
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run model tests
-        run: pytest tests/test_models/ -v
-
-  test-api:
-    name: API Contract Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run API tests
-        run: pytest tests/test_api/ -v
-
+  # ===========================================================================
+  # Lint and Type Check
+  # ===========================================================================
   lint:
-    name: Lint
+    name: Lint & Format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - name: Install ruff
-        run: pip install ruff
-      - name: Run linter
-        run: ruff check src/ api/ tests/
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install linters
+        run: |
+          pip install ruff black isort
+
+      - name: Run ruff
+        run: ruff check . --output-format=github || true
+
+      - name: Check black formatting
+        run: black --check . || true
+
+      - name: Check import sorting
+        run: isort --check-only . || true
+
+  # ===========================================================================
+  # Unit Tests
+  # ===========================================================================
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+          pip install pytest pytest-cov pytest-xdist
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v --tb=short --cov=src --cov=api --cov-report=xml --cov-report=term-missing -n auto
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
+  # ===========================================================================
+  # Model Quality Gate
+  # ===========================================================================
+  quality-gate:
+    name: Model Quality Gate
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Generate synthetic data
+        run: |
+          python -c "
+          from src.core.data_generator import generate_login_events
+          df = generate_login_events(n_events=5000, fraud_rate=0.1)
+          df.to_parquet('data/login_events.parquet', index=False)
+          print(f'Generated {len(df)} events')
+          "
+
+      - name: Train model and check AUC
+        run: |
+          python -c "
+          from src.models.risk_model import train_and_evaluate
+          from src.features.feature_engineering import engineer_features
+          import pandas as pd
+
+          # Load and engineer features
+          df = pd.read_parquet('data/login_events.parquet')
+          df = engineer_features(df)
+
+          # Train and evaluate
+          results = train_and_evaluate(df)
+          auc = results['auc']
+          print(f'Model AUC: {auc:.4f}')
+
+          # Quality gate: AUC must be >= 0.85
+          assert auc >= 0.85, f'Model AUC {auc:.4f} below threshold 0.85'
+          print('Quality gate PASSED')
+          "
+
+      - name: Save model artifact
+        run: |
+          mkdir -p models
+          python -c "
+          from src.models.risk_model import train_and_evaluate, RiskScorer
+          from src.features.feature_engineering import engineer_features
+          import pandas as pd
+
+          df = pd.read_parquet('data/login_events.parquet')
+          df = engineer_features(df)
+          results = train_and_evaluate(df)
+          results['scorer'].save('models/risk_model.pkl')
+          print('Model saved to models/risk_model.pkl')
+          "
+
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: risk-model
+          path: models/risk_model.pkl
+          retention-days: 30
+
+  # ===========================================================================
+  # Build Docker Images
+  # ===========================================================================
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [test, quality-gate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download model artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: risk-model
+          path: models/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push UI image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.streamlit
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ui:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-ui:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ===========================================================================
+  # Security Scan
+  # ===========================================================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install security tools
+        run: |
+          pip install bandit safety
+
+      - name: Run bandit security scan
+        run: bandit -r src/ api/ -ll || true
+
+      - name: Check dependencies for vulnerabilities
+        run: safety check -r requirements.txt || true

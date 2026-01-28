@@ -122,7 +122,7 @@ def test_risk_scorer_save_load(sample_features_df, tmp_path):
     original_result = scorer.score(features)
     loaded_result = loaded_scorer.score(features)
 
-    assert original_result["risk_score"] == loaded_result["risk_score"]
+    assert abs(original_result["risk_score"] - loaded_result["risk_score"]) < 1e-10
 
 
 # Quality Gate Tests
