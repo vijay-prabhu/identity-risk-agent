@@ -120,9 +120,9 @@ jobs:
           df = pd.read_parquet('data/login_events.parquet')
           df = engineer_features(df)
 
-          # Train and evaluate
-          results = train_and_evaluate(df)
-          auc = results['auc']
+          # Train and evaluate (returns tuple: scorer, metrics)
+          scorer, metrics = train_and_evaluate(df)
+          auc = metrics['auc']
           print(f'Model AUC: {auc:.4f}')
 
           # Quality gate: AUC must be >= 0.85
@@ -140,8 +140,8 @@ jobs:
 
           df = pd.read_parquet('data/login_events.parquet')
           df = engineer_features(df)
-          results = train_and_evaluate(df)
-          results['scorer'].save('models/risk_model.pkl')
+          scorer, metrics = train_and_evaluate(df)
+          scorer.save('models/risk_model.pkl')
           print('Model saved to models/risk_model.pkl')
           "
 
