@@ -15,13 +15,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from src.models.risk_model import RiskScorer, FEATURE_COLUMNS
+from src.agents.rag import RAGPipeline
+from src.privacy.pii_detector import PIIDetector, PrivacyMiddleware
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Global model reference
+# Global references
 _scorer: Optional[RiskScorer] = None
+_rag_pipeline: Optional[RAGPipeline] = None
+_privacy: Optional[PrivacyMiddleware] = None
 
 
 def get_scorer() -> RiskScorer:
@@ -37,8 +41,9 @@ def get_scorer() -> RiskScorer:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load model on startup, cleanup on shutdown."""
-    global _scorer
+    global _scorer, _rag_pipeline, _privacy
 
+    # Load risk model
     model_path = Path("models/risk_model.pkl")
     if model_path.exists():
         logger.info(f"Loading model from {model_path}")
@@ -47,11 +52,27 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning(f"Model not found at {model_path}. Scoring will return mock results.")
 
+    # Initialize RAG pipeline
+    try:
+        _rag_pipeline = RAGPipeline()
+        logger.info("RAG pipeline initialized")
+    except Exception as e:
+        logger.warning(f"RAG pipeline initialization failed: {e}. Explain endpoint will use fallback.")
+
+    # Initialize privacy middleware
+    try:
+        _privacy = PrivacyMiddleware(PIIDetector())
+        logger.info("Privacy middleware initialized")
+    except Exception as e:
+        logger.warning(f"Privacy middleware initialization failed: {e}")
+
     yield
 
     # Cleanup
     _scorer = None
-    logger.info("Model unloaded")
+    _rag_pipeline = None
+    _privacy = None
+    logger.info("Resources unloaded")
 
 
 app = FastAPI(
@@ -106,6 +127,11 @@ class ExplainRequest(BaseModel):
     query: str = Field(..., description="Question about the risk decision")
     login_id: Optional[str] = Field(default=None, description="Optional login event ID")
     tenant_id: str = Field(default="default", description="Tenant identifier")
+    # Optional event context for explanation
+    event: Optional[LoginEvent] = Field(default=None, description="Event to explain")
+    risk_score: Optional[float] = Field(default=None, ge=0, le=1)
+    risk_level: Optional[str] = Field(default=None)
+    risk_factors: Optional[list[str]] = Field(default=None)
 
 
 class ExplainResponse(BaseModel):
@@ -249,20 +275,62 @@ async def explain_risk(request: ExplainRequest):
     Get an AI-powered explanation for a risk decision.
 
     Uses RAG to retrieve relevant context and generate explanations.
-    Note: Full implementation requires Phase 3 (GenAI Agent).
     """
     logger.info(f"Explain request: query={request.query[:50]}...")
 
-    # Phase 3 placeholder - will use RAG + LangGraph
+    # Apply privacy controls to query
+    processed_query = request.query
+    if _privacy:
+        result = _privacy.process_for_llm(request.query)
+        processed_query = result["text"]
+        if result["pii_detected"]:
+            logger.info(f"PII redacted from query: {result['entity_count']} entities")
+
+    # Use RAG pipeline if available
+    if _rag_pipeline:
+        try:
+            # Build event dict if provided
+            event_dict = None
+            if request.event:
+                event_dict = {
+                    "user_id": request.event.user_id,
+                    "device_id": request.event.device_id,
+                    "ip": request.event.ip,
+                    "location_country": request.event.location_country,
+                    "location_city": request.event.location_city,
+                    "mfa_used": request.event.mfa_used,
+                    "vpn_detected": request.event.vpn_detected,
+                    "success": request.event.success,
+                    "timestamp": str(request.event.timestamp) if request.event.timestamp else None,
+                }
+
+            result = _rag_pipeline.query(
+                query=processed_query,
+                event=event_dict,
+                risk_score=request.risk_score or 0.0,
+                risk_level=request.risk_level or "low",
+                risk_factors=request.risk_factors or [],
+                tenant_id=request.tenant_id,
+            )
+
+            return ExplainResponse(
+                explanation=result["explanation"],
+                sources=result.get("sources", []),
+                confidence=0.8 if event_dict else 0.5,
+            )
+        except Exception as e:
+            logger.error(f"RAG pipeline error: {e}")
+            # Fall through to fallback response
+
+    # Fallback response
     explanation = (
-        "This endpoint will provide AI-powered explanations using RAG and LangGraph agents. "
-        "Currently in development (Phase 3). "
-        f"Query received: {request.query}"
+        f"Query: {processed_query}\n\n"
+        "Unable to generate detailed explanation. RAG pipeline not available."
     )
 
     return ExplainResponse(
         explanation=explanation,
-        sources=["Phase 3: GenAI Agent (coming soon)"],
+        sources=[],
         confidence=0.0,
     )
 

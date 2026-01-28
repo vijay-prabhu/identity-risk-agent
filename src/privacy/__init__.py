@@ -1,1 +1,5 @@
-# Privacy module - PII detection and redaction
+"""Privacy module for PII detection and redaction."""
+
+from src.privacy.pii_detector import PIIDetector, PIIResult
+
+__all__ = ["PIIDetector", "PIIResult"]
