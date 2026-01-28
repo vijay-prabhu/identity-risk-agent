@@ -1,0 +1,4 @@
+# Feast generated files
+data/
+*.db
+*.pb
