@@ -103,8 +103,8 @@ jobs:
       - name: Generate synthetic data
         run: |
           python -c "
-          from src.core.data_generator import generate_login_events
-          df = generate_login_events(n_events=5000, fraud_rate=0.1)
+          from src.core.data_generator import generate_logins
+          df = generate_logins(n_events=5000, fraud_rate=0.1, output_path=None)
           df.to_parquet('data/login_events.parquet', index=False)
           print(f'Generated {len(df)} events')
           "
