@@ -7,11 +7,10 @@ Includes quality gates to ensure new model meets performance thresholds.
 
 from datetime import datetime, timedelta
 
-from airflow import DAG
-from airflow.operators.python import PythonOperator, BranchPythonOperator
-from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
+from airflow.operators.python import BranchPythonOperator, PythonOperator
 
+from airflow import DAG
 
 # Default arguments
 default_args = {
@@ -30,9 +29,10 @@ MIN_TRAINING_SAMPLES = 5000
 
 def collect_training_data(**context):
     """Collect recent feature data for training."""
-    import pandas as pd
-    from pathlib import Path
     import sys
+    from pathlib import Path
+
+    import pandas as pd
     sys.path.insert(0, '/app')
 
     # Collect last 30 days of feature data
@@ -84,13 +84,14 @@ def check_data_quality(**context):
 
 def train_model(**context):
     """Train new risk scoring model."""
-    import pandas as pd
-    import mlflow
     import sys
+
+    import mlflow
+    import pandas as pd
     sys.path.insert(0, '/app')
 
-    from src.models.risk_model import train_and_evaluate
     from src.features.feature_engineering import engineer_features
+    from src.models.risk_model import train_and_evaluate
 
     ti = context['ti']
     data_info = ti.xcom_pull(task_ids='collect_data')
@@ -161,9 +162,10 @@ def evaluate_model(**context):
 def promote_model(**context):
     """Promote candidate model to production."""
     import shutil
-    from pathlib import Path
-    import mlflow
     import sys
+    from pathlib import Path
+
+    import mlflow
     sys.path.insert(0, '/app')
 
     ti = context['ti']
@@ -183,7 +185,7 @@ def promote_model(**context):
 
     # Promote new model
     shutil.copy(src_path, dst_path)
-    print(f"Promoted new model to production")
+    print("Promoted new model to production")
 
     # Transition model stage in MLflow
     mlflow.set_tracking_uri('http://mlflow:5000')
@@ -224,7 +226,7 @@ def notify_completion(**context):
 
     # Check which branch was taken
     promote_result = ti.xcom_pull(task_ids='promote_model')
-    reject_result = ti.xcom_pull(task_ids='reject_model')
+    ti.xcom_pull(task_ids='reject_model')
 
     if promote_result:
         print(f"Model retrain completed - New model deployed with AUC: {promote_result:.4f}")

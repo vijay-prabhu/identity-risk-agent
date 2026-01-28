@@ -7,10 +7,10 @@ Runs feature engineering pipeline and materializes to online store.
 
 from datetime import datetime, timedelta
 
-from airflow import DAG
-from airflow.operators.python import PythonOperator
 from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator
 
+from airflow import DAG
 
 # Default arguments for all tasks
 default_args = {
@@ -25,8 +25,6 @@ default_args = {
 
 def generate_daily_events(**context):
     """Generate synthetic events for the day (simulates real data ingestion)."""
-    import pandas as pd
-    from datetime import datetime
     import sys
     sys.path.insert(0, '/app')
 
@@ -56,8 +54,9 @@ def generate_daily_events(**context):
 
 def engineer_features(**context):
     """Run feature engineering on new events."""
-    import pandas as pd
     import sys
+
+    import pandas as pd
     sys.path.insert(0, '/app')
 
     from src.features.feature_engineering import engineer_features
@@ -83,7 +82,8 @@ def update_feature_store(**context):
     import sys
     sys.path.insert(0, '/app')
 
-    from datetime import datetime, timedelta
+    from datetime import timedelta
+
     from feast import FeatureStore
 
     # Initialize feature store
@@ -103,8 +103,9 @@ def update_feature_store(**context):
 
 def validate_features(**context):
     """Run feature quality checks."""
-    import pandas as pd
     import sys
+
+    import pandas as pd
     sys.path.insert(0, '/app')
 
     ti = context['ti']
