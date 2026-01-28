@@ -162,9 +162,13 @@ Enterprise identity providers manage authentication for thousands of organizatio
 ```mermaid
 graph TB
     A[Login Events<br/>Synthetic + Real APIs] --> B[Feature Store<br/>Feast Local]
-    B --> C[Risk Model<br/>Isolation Forest]
+    B --> C[Risk Model<br/>XGBoost/RF Auto-Select]
     B --> D[Vector DB<br/>Qdrant + Embeddings]
     C --> E[FastAPI Serving<br/>Multi-Tenant]
+    subgraph LLM[Local LLM]
+        K[Ollama<br/>llama3.2]
+    end
+    K -.-> F
     D --> F[RAG Pipeline]
     F --> G[LangGraph Agent<br/>MCP Tools]
     E --> H[Streamlit UI]
@@ -179,10 +183,10 @@ graph TB
 
 | Feature | Status | Tech |
 |---------|--------|------|
-| **Real-Time Risk Scoring** | ✅ | scikit-learn + Feast online store |
+| **Real-Time Risk Scoring** | ✅ | XGBoost/scikit-learn + Feast online store |
 | **Multi-Tenant Isolation** | ✅ | Qdrant namespaces + API middleware |
 | **Privacy & PII Redaction** | ✅ | Presidio + regex fallback |
-| **RAG Explanations** | ✅ | sentence-transformers + Qdrant |
+| **RAG Explanations** | ✅ | sentence-transformers + Qdrant + Ollama |
 | **Autonomous Agents** | ✅ | LangGraph + MCP-like tools |
 | **Production Orchestration** | ✅ | Airflow DAGs + CI/CD gates |
 | **Observability** | ✅ | MLflow + Prometheus + Grafana |
@@ -234,7 +238,7 @@ make test-gate  # Verify model AUC >= 0.85
 | Layer | Technologies |
 |-------|-------------|
 | **Data** | pandas, Faker (synthetic), pyarrow |
-| **ML** | scikit-learn, sentence-transformers |
+| **ML** | scikit-learn, XGBoost, sentence-transformers |
 | **Feature Store** | Feast (online/offline) |
 | **GenAI** | LangGraph, Qdrant, Ollama |
 | **API** | FastAPI, Pydantic |
