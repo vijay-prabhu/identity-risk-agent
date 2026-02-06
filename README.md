@@ -252,6 +252,21 @@ All components are open-source and free-tier compatible.
 
 ---
 
+## Adaptable to Other Risk Domains
+
+The scoring pipeline, feature store, agent framework, and observability stack are domain-agnostic. Swapping the data layer adapts the platform to other risk use cases:
+
+| Component | Identity Risk (Current) | Financial Transaction Risk |
+|-----------|------------------------|---------------------------|
+| **Feature Store** | Login velocity, geo-anomaly, device fingerprint | Transaction velocity, amount deviation, merchant category |
+| **ML Scoring** | XGBoost/RF on login events | Same pipeline on transaction events with fraud labels |
+| **Agent Investigation** | Traces login chains across tenants | Traces transaction patterns and account linkages |
+| **RAG Explainability** | Security policy docs + past incidents | Compliance rules + historical fraud patterns |
+| **PII Redaction** | Presidio on user identity data | Same pipeline for cardholder/account data (PCI-DSS) |
+| **Multi-Tenant** | Per-org thresholds and data isolation | Per-merchant or per-institution risk policies |
+
+---
+
 ## Project Structure
 
 ```
